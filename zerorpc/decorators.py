@@ -50,16 +50,34 @@ class DecoratorBase(object):
 
     def _zerorpc_args(self):
         try:
-            args_spec = self._functor._zerorpc_args()
+            return self._functor._zerorpc_args()
         except AttributeError:
+            pass
+
+        try:
+            # zerorpc default, cant handle python3.5 types
             try:
-                args_spec = inspect.getargspec(self._functor)
+                return inspect.getargspec(self._functor)
             except TypeError:
-                try:
-                    args_spec = inspect.getargspec(self._functor.__call__)
-                except (AttributeError, TypeError):
-                    args_spec = None
-        return args_spec
+                pass
+
+            try:
+                return inspect.getargspec(self._functor.__call__)
+            except (AttributeError, TypeError):
+                pass
+        except ValueError:
+            pass
+
+        # Thrown if python3.5 types are used
+        try:
+            return inspect.getfullargspec(self._functor)
+        except TypeError:
+            try:
+                return inspect.getfullargspec(self._functor.__call__)
+            except (AttributeError, TypeError):
+                pass
+
+        return None
 
 
 class rep(DecoratorBase):
