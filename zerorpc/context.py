@@ -133,11 +133,26 @@ class Context(zmq.Context):
     # client/server
     #
     def hook_resolve_endpoint(self, endpoint):
+        """        
+        called before connect, disconnect and bind. 
+        returning a list of endpoints is supported 
+        
+        :param endpoint: already resolved endpoints
+        :return: endpoint or list of endpoints
+        """
+        """ 
+        """
         for functor in self._hooks['resolve_endpoint']:
             endpoint = functor(endpoint)
         return endpoint
 
     def hook_load_task_context(self, event_header):
+        """
+        Used by Server and Puller, executed directly after recv()
+        
+        :param event_header: header of the just received event
+        :return: None
+        """
         for functor in self._hooks['load_task_context']:
             functor(event_header)
 
