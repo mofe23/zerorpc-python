@@ -92,7 +92,7 @@ class ServerBase(object):
         self.stop()
         self._multiplexer.close()
 
-    def _format_args_spec(self, args_spec, r=None):
+    def _format_args_spec_untyped(self, args_spec, r=None):
         if args_spec:
             r = [dict(name=name) for name in args_spec[0]]
             default_values = args_spec[3]
@@ -101,12 +101,42 @@ class ServerBase(object):
                     arg['default'] = def_val
         return r
 
-    def _zerorpc_inspect(self):
+    def _format_args_spec_typed(self, args_spec, r=None):
+        import collections
+        x = collections.OrderedDict()
+
+        for name in args_spec.args:
+            x[name] = dict(name=name)
+
+        if args_spec.defaults is not None:
+            for default, arg in zip(args_spec.defaults, x.values()):
+                arg['default'] = default
+
+        annotations = getattr(args_spec, "annotations", None)
+        return_type = None
+        if annotations is not None:
+            ret = None
+            for k, v in annotations.items():
+                if k == "return":
+                    return_type = v.__name__
+                else:
+                    x[k]['type'] = v.__name__
+
+        return list(x.values()), return_type
+
+    def _format_args_spec(self, args_spec, r=None, typed=False):
+        if typed is True:
+            return zip(("args", "returns"), self._format_args_spec_typed(args_spec, r))
+        else:
+            return zip("args", self._format_args_spec_untyped(args_spec, r))
+
+    def _zerorpc_inspect(self, typed=False):
         methods = dict((m, f) for m, f in iteritems(self._methods)
                     if not m.startswith('_'))
         detailled_methods = dict((m,
-            dict(args=self._format_args_spec(f._zerorpc_args()),
-                doc=f._zerorpc_doc())) for (m, f) in iteritems(methods))
+            dict(self._format_args_spec(f._zerorpc_args(), typed=typed),
+                 type="method",
+                 doc=f._zerorpc_doc())) for (m, f) in iteritems(methods))
         return {'name': self._name,
                 'methods': detailled_methods}
 
@@ -256,10 +286,12 @@ class ClientBase(object):
             method = method.decode('utf-8')
 
         timeout = kargs.get('timeout', self._timeout)
+        inqueue_size = kargs.get('slots', 100)
+
         channel = self._multiplexer.channel()
         hbchan = HeartBeatOnChannel(channel, freq=self._heartbeat_freq,
                 passive=self._passive_heartbeat)
-        bufchan = BufferedChannel(hbchan, inqueue_size=kargs.get('slots', 100))
+        bufchan = BufferedChannel(hbchan, inqueue_size=inqueue_size)
 
         xheader = self._context.hook_get_task_context()
         request_event = bufchan.new_event(method, args, xheader)
